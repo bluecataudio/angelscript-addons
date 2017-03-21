@@ -9,13 +9,10 @@
 BEGIN_AS_NAMESPACE
 
 class CScriptDictionary;
-
-// The internal structure for holding contexts
-struct SContextInfo;
-
-// The signature of the get time callback function
-typedef asUINT (*TIMEFUNC_t)();
-
+/** A simple generator add-on for Angelscript to manage
+*   coroutines like in javascript, using yield() and next() statements.
+*   status: WIP.
+*/
 class CGenerator
 {
 public:
@@ -48,7 +45,7 @@ protected:
 // Registers the following:
 //
 //  funcdef void generator(dictionary@)
-//  void createGenerator(generator @func, dictionary @args)
+//  void generator@ createGenerator(generatorFunc @func, dictionary @args)
 //  void yield()
 void RegisterGeneratorSupport(asIScriptEngine *engine);
 
