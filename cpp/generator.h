@@ -8,6 +8,8 @@
 
 BEGIN_AS_NAMESPACE
 
+#include "../scriptany/scriptany.h"
+
 class CScriptDictionary;
 /** A simple generator add-on for Angelscript to manage
 *   coroutines like in javascript, using yield() and next() statements.
@@ -24,21 +26,37 @@ public:
     int Release() const;
 
     // Switch the execution to the next step in the generator
+    // and optionally sets a return value for yield
     // Returns true if generator not done yet
     bool Next();
+    bool Next(void *ref, int refTypeId);
+    bool Next(asINT64 &value);
+    bool Next(double &value);
 
     // Abort 
     //void Abort();
+    const CScriptAny* GetValue()const;
+    CScriptAny* GetValue();
 
+    // creates and stores a new value for next yield return
+    CScriptAny* NewYieldReturnPtr(asIScriptEngine* engine);
 protected:
-    asIScriptContext * ctx;
+    bool        DoNext();
+
+    // our reference counter for the generator object
+    mutable int refCount;
 
     // Statistics for Garbage Collection
     asUINT   m_numExecutions;
     asUINT   m_numGCObjectsCreated;
     asUINT   m_numGCObjectsDestroyed;
 
-    mutable int refCount;
+    // the context associated with the generator object
+    asIScriptContext * ctx;
+    // the value for the next yield return (sent from caller to callee)
+    CScriptAny* yieldReturn;
+    // the value associated with the generator (sent back to caller)
+    CScriptAny* value;
 };
 
 

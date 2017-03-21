@@ -7,7 +7,9 @@ using namespace std;
 
 BEGIN_AS_NAMESPACE
 
-static const asPWORD YIELD_IS_ALLOWED = 1002;
+static const asPWORD YIELD_IS_ALLOWED = 6666;
+static const asPWORD YIELD_GENERATOR=6667;
+
 static const int kYieldAllowedMagic = 321321321;
 
 asIScriptContext * CreateContextForGenerator(asIScriptContext *currCtx, asIScriptFunction *func)
@@ -31,8 +33,9 @@ asIScriptContext * CreateContextForGenerator(asIScriptContext *currCtx, asIScrip
     return coctx;
 }
 
-static void ScriptYield()
+void* ScriptYieldObject(void *ref, int refTypeId)
 {
+    void* returnPointer=0;
     // Get a pointer to the context that is currently being executed
     asIScriptContext *ctx = asGetActiveContext();
     if (ctx)
@@ -40,6 +43,17 @@ static void ScriptYield()
         void* data = ctx->GetUserData(YIELD_IS_ALLOWED);
         if (data != NULL && (*reinterpret_cast<int*>(data) == kYieldAllowedMagic))
         {
+            // get the generator
+            CGenerator* theGenerator = reinterpret_cast<CGenerator*>(ctx->GetUserData(YIELD_GENERATOR));
+            if (theGenerator)
+            {
+                // store value
+                theGenerator->GetValue()->Store(ref,refTypeId);
+
+                // store return object - the trick is that the execution of the VM will be stopped AFTER we have returned
+                // so the return value has to be a valid object, always.
+                returnPointer = reinterpret_cast<void*>(theGenerator->NewYieldReturnPtr(ctx->GetEngine()));
+            }
             // The current context must be suspended so that VM will return from
             // the Next() method where the context manager will continue.
             ctx->Suspend();
@@ -50,6 +64,22 @@ static void ScriptYield()
             ctx->SetException("Cannot call yield outside of a generator function");
         }
     }
+    return returnPointer;
+}
+
+void* ScriptYield()
+{
+    return ScriptYieldObject(NULL,0);
+}
+
+void* ScriptYieldInt(asINT64 &value)
+{
+    return	ScriptYieldObject(&value, asTYPEID_INT64);
+}
+
+void* ScriptYieldDouble(double &value)
+{
+    return	ScriptYieldObject(&value, asTYPEID_DOUBLE);
 }
 
 CGenerator* ScriptCreateGenerator(asIScriptFunction *func, CScriptDictionary *arg)
@@ -89,8 +119,16 @@ void ScriptCreateGenerator_generic(asIScriptGeneric *gen)
 
 CGenerator::CGenerator(asIScriptContext *context) :
     ctx(context),
-    refCount(1)
+    refCount(1),
+    yieldReturn(NULL),
+    value(NULL)
 {
+    // store the context and create our ScriptAny value
+    if (ctx)
+    {
+        ctx->SetUserData(this, YIELD_GENERATOR);
+        value=new CScriptAny(ctx->GetEngine());
+    }
     m_numExecutions = 0;
     m_numGCObjectsCreated = 0;
     m_numGCObjectsDestroyed = 0;
@@ -104,6 +142,18 @@ CGenerator::~CGenerator()
         // Return the context to the engine (and possible context pool configured in it)
         ctx->SetUserData(NULL, YIELD_IS_ALLOWED);
         ctx->GetEngine()->ReturnContext(ctx);
+    }
+    // cleanup value
+    if (value)
+    {
+        value->Release();
+        value=NULL;
+    }
+    // cleanup yieldReturn cache if any
+    if (yieldReturn)
+    {
+        yieldReturn->Release();
+        yieldReturn=NULL;
     }
 }
 
@@ -125,7 +175,7 @@ int CGenerator::Release() const
     return refCount;
 }
 
-bool CGenerator::Next()
+bool CGenerator::DoNext()
 {
     if (ctx)
     {
@@ -136,8 +186,19 @@ bool CGenerator::Next()
             asUINT gcSize1, gcSize2, gcSize3;
             engine->GetGCStatistics(&gcSize1);
 
+            // store pointer to previous return value container to cleanup, AFTER the call
+            CScriptAny* prevYieldReturn=yieldReturn;
+            yieldReturn=NULL;
+
             // Execute the script for this generator, until yield is called.
             int r = ctx->Execute();
+
+            // cleanup our previous yield return object if any
+            if (prevYieldReturn != NULL)
+            {
+                prevYieldReturn->Release();
+                prevYieldReturn=NULL;
+            }
 
             // Determine how many new objects were created in the GC
             engine->GetGCStatistics(&gcSize2);
@@ -149,6 +210,8 @@ bool CGenerator::Next()
                 // The context has terminated execution (for one reason or other)
                 // return the context to the pool now
                 ctx->SetUserData(NULL, YIELD_IS_ALLOWED);
+                ctx->SetUserData(NULL,YIELD_GENERATOR);
+                value->Store(0,0);
                 engine->ReturnContext(ctx);
                 ctx = NULL;
             }
@@ -170,12 +233,57 @@ bool CGenerator::Next()
     return ctx != NULL;
 }
 
+bool CGenerator::Next()
+{
+    // returned value is empty
+    if (yieldReturn != NULL)
+        yieldReturn->Store(0,0);
+    return DoNext();
+}
+
+bool CGenerator::Next(void *ref, int refTypeId)
+{
+    // store returned value inot the returned any object
+    if (yieldReturn != NULL)
+        yieldReturn->Store(ref,refTypeId);
+    return DoNext();
+}
+
+bool CGenerator::Next(asINT64 &value)
+{
+    return	Next(&value, asTYPEID_INT64);
+}
+
+bool CGenerator::Next(double &value)
+{
+    return	Next(&value, asTYPEID_DOUBLE);
+}
+
+const CScriptAny* CGenerator::GetValue()const
+{
+    return value;
+}
+
+CScriptAny* CGenerator::GetValue()
+{
+    return value;
+}
+
+CScriptAny* CGenerator::NewYieldReturnPtr(asIScriptEngine* engine)
+{
+    // create new value, and store it for later (will have to be cleaned after Next is called)
+    yieldReturn=new CScriptAny(engine);
+    yieldReturn->AddRef();
+    return yieldReturn;
+}
+
 void RegisterGeneratorSupport(asIScriptEngine *engine)
 {
     int r;
 
-    // The dictionary add-on must have been registered already
+    // The dictionary and any add-ons must have been registered already
     assert(engine->GetTypeInfoByDecl("dictionary"));
+    assert(engine->GetTypeInfoByDecl("any"));
 
 #ifndef AS_MAX_PORTABILITY
     // register generator object
@@ -183,9 +291,16 @@ void RegisterGeneratorSupport(asIScriptEngine *engine)
     r = engine->RegisterObjectBehaviour("generator", asBEHAVE_ADDREF, "void f()", asMETHOD(CGenerator, AddRef), asCALL_THISCALL); assert(r >= 0);
     r = engine->RegisterObjectBehaviour("generator", asBEHAVE_RELEASE, "void f()", asMETHOD(CGenerator, Release), asCALL_THISCALL); assert(r >= 0);
     r = engine->RegisterObjectMethod("generator", "bool next()", asMETHODPR(CGenerator, Next, (void), bool), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("generator", "bool next(?&in)", asMETHODPR(CGenerator, Next, (void*,int), bool), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("generator", "bool next(const int64&in)", asMETHODPR(CGenerator, Next, (asINT64&), bool), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("generator", "bool next(const double&in)", asMETHODPR(CGenerator, Next, (double&), bool), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("generator", "any& get_value() const", asMETHODPR(CGenerator, GetValue,(void)const,const CScriptAny*), asCALL_THISCALL); assert( r >= 0 );
 
     // register the associated global functions and types
-    r = engine->RegisterGlobalFunction("void yield()", asFUNCTION(ScriptYield), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("any@ yield()", asFUNCTION(ScriptYield), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("any@ yield(?&in)", asFUNCTION(ScriptYieldObject), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("any@ yield(const int64&in)", asFUNCTION(ScriptYieldInt), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("any@ yield(const double&in)", asFUNCTION(ScriptYieldDouble), asCALL_CDECL); assert(r >= 0);
     r = engine->RegisterFuncdef("void generatorFunc(dictionary@)");
     r = engine->RegisterGlobalFunction("generator@ createGenerator(generatorFunc @+, dictionary @+)", asFUNCTION(ScriptCreateGenerator), asCALL_CDECL); assert(r >= 0);
 #else
