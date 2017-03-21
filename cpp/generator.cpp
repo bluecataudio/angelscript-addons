@@ -8,26 +8,26 @@ using namespace std;
 BEGIN_AS_NAMESPACE
 
 static const asPWORD YIELD_IS_ALLOWED = 1002;
-static const int kYieldAllowedMagic=321321321;
+static const int kYieldAllowedMagic = 321321321;
 
 asIScriptContext * CreateContextForGenerator(asIScriptContext *currCtx, asIScriptFunction *func)
 {
     asIScriptEngine *engine = currCtx->GetEngine();
     asIScriptContext *coctx = engine->RequestContext();
-    if( coctx == 0 )
+    if (coctx == 0)
     {
         return 0;
     }
 
     // Prepare the context
     int r = coctx->Prepare(func);
-    if( r < 0 )
+    if (r < 0)
     {
         // Couldn't prepare the context
         engine->ReturnContext(coctx);
         return 0;
     }
-    coctx->SetUserData((void*)&kYieldAllowedMagic,YIELD_IS_ALLOWED);
+    coctx->SetUserData((void*)&kYieldAllowedMagic, YIELD_IS_ALLOWED);
     return coctx;
 }
 
@@ -37,7 +37,7 @@ static void ScriptYield()
     asIScriptContext *ctx = asGetActiveContext();
     if (ctx)
     {
-        void* data=ctx->GetUserData(YIELD_IS_ALLOWED);
+        void* data = ctx->GetUserData(YIELD_IS_ALLOWED);
         if (data != NULL && (*reinterpret_cast<int*>(data) == kYieldAllowedMagic))
         {
             // The current context must be suspended so that VM will return from
@@ -54,7 +54,7 @@ static void ScriptYield()
 
 CGenerator* ScriptCreateGenerator(asIScriptFunction *func, CScriptDictionary *arg)
 {
-    CGenerator* gen=0;
+    CGenerator* gen = 0;
     if (func != 0)
     {
         asIScriptContext *ctx = asGetActiveContext();
@@ -67,7 +67,7 @@ CGenerator* ScriptCreateGenerator(asIScriptFunction *func, CScriptDictionary *ar
             coctx->SetArgObject(0, arg);
 
             // The generator will call Execute() on this context when "Next" is called
-            gen=new CGenerator(coctx);
+            gen = new CGenerator(coctx);
         }
     }
     return gen;
@@ -76,24 +76,24 @@ CGenerator* ScriptCreateGenerator(asIScriptFunction *func, CScriptDictionary *ar
 #ifdef AS_MAX_PORTABILITY
 void ScriptYield_generic(asIScriptGeneric *)
 {
-	ScriptYield();
+    ScriptYield();
 }
 
 void ScriptCreateGenerator_generic(asIScriptGeneric *gen)
 {
-	asIScriptFunction *func = reinterpret_cast<asIScriptFunction*>(gen->GetArgAddress(0));
-	CScriptDictionary *dict = reinterpret_cast<CScriptDictionary*>(gen->GetArgAddress(1));
+    asIScriptFunction *func = reinterpret_cast<asIScriptFunction*>(gen->GetArgAddress(0));
+    CScriptDictionary *dict = reinterpret_cast<CScriptDictionary*>(gen->GetArgAddress(1));
     ScriptCreateGenerator(func, dict);
 }
 #endif
 
-CGenerator::CGenerator(asIScriptContext *context):
+CGenerator::CGenerator(asIScriptContext *context) :
     ctx(context),
     refCount(1)
 {
-	m_numExecutions         = 0;
-	m_numGCObjectsCreated   = 0;
-	m_numGCObjectsDestroyed = 0;
+    m_numExecutions = 0;
+    m_numGCObjectsCreated = 0;
+    m_numGCObjectsDestroyed = 0;
 }
 
 CGenerator::~CGenerator()
@@ -102,7 +102,7 @@ CGenerator::~CGenerator()
     if (ctx)
     {
         // Return the context to the engine (and possible context pool configured in it)
-        ctx->SetUserData(NULL,YIELD_IS_ALLOWED);
+        ctx->SetUserData(NULL, YIELD_IS_ALLOWED);
         ctx->GetEngine()->ReturnContext(ctx);
     }
 }
@@ -116,7 +116,7 @@ int CGenerator::AddRef() const
 int CGenerator::Release() const
 {
     // Decrease the ref counter
-    if( asAtomicDec(refCount) == 0 )
+    if (asAtomicDec(refCount) == 0)
     {
         // Delete this object as no more references to it exists
         delete this;
@@ -129,7 +129,7 @@ bool CGenerator::Next()
 {
     if (ctx)
     {
-        asIScriptEngine* engine=ctx->GetEngine();
+        asIScriptEngine* engine = ctx->GetEngine();
         if (engine)
         {
             // Gather some statistics from the GC
@@ -148,7 +148,7 @@ bool CGenerator::Next()
             {
                 // The context has terminated execution (for one reason or other)
                 // return the context to the pool now
-                ctx->SetUserData(NULL,YIELD_IS_ALLOWED);
+                ctx->SetUserData(NULL, YIELD_IS_ALLOWED);
                 engine->ReturnContext(ctx);
                 ctx = NULL;
             }
@@ -172,7 +172,7 @@ bool CGenerator::Next()
 
 void RegisterGeneratorSupport(asIScriptEngine *engine)
 {
-	int r; 
+    int r;
 
     // The dictionary add-on must have been registered already
     assert(engine->GetTypeInfoByDecl("dictionary"));

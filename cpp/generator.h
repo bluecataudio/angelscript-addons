@@ -16,27 +16,27 @@ class CScriptDictionary;
 class CGenerator
 {
 public:
-	CGenerator(asIScriptContext *context);
-	~CGenerator();
+    CGenerator(asIScriptContext *context);
+    ~CGenerator();
 
     // Memory management
     int AddRef() const;
     int Release() const;
 
-	// Switch the execution to the next step in the generator
-	// Returns true if generator not done yet
-	bool Next();
+    // Switch the execution to the next step in the generator
+    // Returns true if generator not done yet
+    bool Next();
 
-	// Abort 
-	//void Abort();
+    // Abort 
+    //void Abort();
 
 protected:
     asIScriptContext * ctx;
 
-	// Statistics for Garbage Collection
-	asUINT   m_numExecutions;
-	asUINT   m_numGCObjectsCreated;
-	asUINT   m_numGCObjectsDestroyed;
+    // Statistics for Garbage Collection
+    asUINT   m_numExecutions;
+    asUINT   m_numGCObjectsCreated;
+    asUINT   m_numGCObjectsDestroyed;
 
     mutable int refCount;
 };
