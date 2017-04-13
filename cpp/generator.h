@@ -14,6 +14,7 @@ class CScriptDictionary;
 /** A simple generator add-on for Angelscript to manage
 *   coroutines like in javascript, using yield() and next() statements.
 *   status: WIP.
+*   todo: manage return / abort ? ("terminate"?)
 */
 class CGenerator
 {

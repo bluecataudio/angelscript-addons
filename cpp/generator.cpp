@@ -141,8 +141,12 @@ CGenerator::~CGenerator()
     {
         // Return the context to the engine (and possible context pool configured in it)
         ctx->SetUserData(NULL, YIELD_IS_ALLOWED);
+        ctx->SetUserData(NULL,YIELD_GENERATOR);
+        value->Store(0,0);
         ctx->GetEngine()->ReturnContext(ctx);
+        ctx=NULL;
     }
+
     // cleanup value
     if (value)
     {
@@ -207,6 +211,17 @@ bool CGenerator::DoNext()
 
             if (r != asEXECUTION_SUSPENDED)
             {
+                // in case of exception, forward the exception to current context so that
+                // error is properly reported
+                if (r==asEXECUTION_EXCEPTION)
+                {
+                    asIScriptContext* currentCtx=asGetActiveContext();
+                    if (currentCtx != NULL)
+                    {
+                        currentCtx->SetException(ctx->GetExceptionString());
+                    }
+                }
+
                 // The context has terminated execution (for one reason or other)
                 // return the context to the pool now
                 ctx->SetUserData(NULL, YIELD_IS_ALLOWED);
