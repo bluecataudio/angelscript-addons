@@ -292,6 +292,8 @@ CScriptAny* CGenerator::NewYieldReturnPtr(asIScriptEngine* engine)
     return yieldReturn;
 }
 
+#include "../autowrapper/aswrappedcall.h"
+
 void RegisterGeneratorSupport(asIScriptEngine *engine)
 {
     int r;
@@ -300,31 +302,45 @@ void RegisterGeneratorSupport(asIScriptEngine *engine)
     assert(engine->GetTypeInfoByDecl("dictionary"));
     assert(engine->GetTypeInfoByDecl("any"));
 
-#ifndef AS_MAX_PORTABILITY
     // register generator object
     r = engine->RegisterObjectType("generator", sizeof(CGenerator), asOBJ_REF); assert(r >= 0);
-    r = engine->RegisterObjectBehaviour("generator", asBEHAVE_ADDREF, "void f()", asMETHOD(CGenerator, AddRef), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectBehaviour("generator", asBEHAVE_RELEASE, "void f()", asMETHOD(CGenerator, Release), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("generator", "bool next()", asMETHODPR(CGenerator, Next, (void), bool), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("generator", "bool next(?&in)", asMETHODPR(CGenerator, Next, (void*,int), bool), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("generator", "bool next(const int64&in)", asMETHODPR(CGenerator, Next, (asINT64&), bool), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("generator", "bool next(const double&in)", asMETHODPR(CGenerator, Next, (double&), bool), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("generator", "any& get_value() const", asMETHODPR(CGenerator, GetValue,(void)const,const CScriptAny*), asCALL_THISCALL); assert( r >= 0 );
-
-    // register the associated global functions and types
-    r = engine->RegisterGlobalFunction("any@ yield()", asFUNCTION(ScriptYield), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("any@ yield(?&in)", asFUNCTION(ScriptYieldObject), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("any@ yield(const int64&in)", asFUNCTION(ScriptYieldInt), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("any@ yield(const double&in)", asFUNCTION(ScriptYieldDouble), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterFuncdef("void generatorFunc(dictionary@)");
-    r = engine->RegisterGlobalFunction("generator@ createGenerator(generatorFunc @+, dictionary @+)", asFUNCTION(ScriptCreateGenerator), asCALL_CDECL); assert(r >= 0);
-#else
-    // not implemented yet
-    ASSERT(0);
-    r = engine->RegisterGlobalFunction("void yield()", asFUNCTION(ScriptYield_generic), asCALL_GENERIC); assert(r >= 0);
-    r = engine->RegisterFuncdef("void coroutine(dictionary@)");
-    r = engine->RegisterGlobalFunction("void createCoRoutine(coroutine @, dictionary @)", asFUNCTION(ScriptCreateCoRoutine_generic), asCALL_GENERIC); assert(r >= 0);
-#endif
+    if(strstr(asGetLibraryOptions(), "AS_MAX_PORTABILITY")==0)
+    {
+        // register generator object methods
+        r = engine->RegisterObjectBehaviour("generator", asBEHAVE_ADDREF, "void f()", asMETHOD(CGenerator, AddRef), asCALL_THISCALL); assert(r >= 0);
+        r = engine->RegisterObjectBehaviour("generator", asBEHAVE_RELEASE, "void f()", asMETHOD(CGenerator, Release), asCALL_THISCALL); assert(r >= 0);
+        r = engine->RegisterObjectMethod("generator", "bool next()", asMETHODPR(CGenerator, Next, (void), bool), asCALL_THISCALL); assert(r >= 0);
+        r = engine->RegisterObjectMethod("generator", "bool next(?&in)", asMETHODPR(CGenerator, Next, (void*,int), bool), asCALL_THISCALL); assert(r >= 0);
+        r = engine->RegisterObjectMethod("generator", "bool next(const int64&in)", asMETHODPR(CGenerator, Next, (asINT64&), bool), asCALL_THISCALL); assert(r >= 0);
+        r = engine->RegisterObjectMethod("generator", "bool next(const double&in)", asMETHODPR(CGenerator, Next, (double&), bool), asCALL_THISCALL); assert(r >= 0);
+        r = engine->RegisterObjectMethod("generator", "any& get_value() const", asMETHODPR(CGenerator, GetValue,(void)const,const CScriptAny*), asCALL_THISCALL); assert( r >= 0 );
+        
+        // register the associated global functions and types
+        r = engine->RegisterGlobalFunction("any@ yield()", asFUNCTION(ScriptYield), asCALL_CDECL); assert(r >= 0);
+        r = engine->RegisterGlobalFunction("any@ yield(?&in)", asFUNCTION(ScriptYieldObject), asCALL_CDECL); assert(r >= 0);
+        r = engine->RegisterGlobalFunction("any@ yield(const int64&in)", asFUNCTION(ScriptYieldInt), asCALL_CDECL); assert(r >= 0);
+        r = engine->RegisterGlobalFunction("any@ yield(const double&in)", asFUNCTION(ScriptYieldDouble), asCALL_CDECL); assert(r >= 0);
+        r = engine->RegisterFuncdef("void generatorFunc(dictionary@)");
+        r = engine->RegisterGlobalFunction("generator@ createGenerator(generatorFunc @+, dictionary @+)", asFUNCTION(ScriptCreateGenerator), asCALL_CDECL); assert(r >= 0);
+    }
+    else
+    {
+        // register generator object methods
+        r = engine->RegisterObjectBehaviour("generator", asBEHAVE_ADDREF, "void f()", WRAP_MFN(CGenerator, AddRef), asCALL_GENERIC); assert(r >= 0);
+        r = engine->RegisterObjectBehaviour("generator", asBEHAVE_RELEASE, "void f()", WRAP_MFN(CGenerator, Release), asCALL_GENERIC); assert(r >= 0);
+        r = engine->RegisterObjectMethod("generator", "bool next()", WRAP_MFN_PR(CGenerator, Next, (void), bool), asCALL_GENERIC); assert(r >= 0);
+        r = engine->RegisterObjectMethod("generator", "bool next(?&in)", WRAP_MFN_PR(CGenerator, Next, (void*,int), bool), asCALL_GENERIC); assert(r >= 0);
+        r = engine->RegisterObjectMethod("generator", "bool next(const int64&in)", WRAP_MFN_PR(CGenerator, Next, (asINT64&), bool), asCALL_GENERIC); assert(r >= 0);
+        r = engine->RegisterObjectMethod("generator", "bool next(const double&in)", WRAP_MFN_PR(CGenerator, Next, (double&), bool), asCALL_GENERIC); assert(r >= 0);
+        r = engine->RegisterObjectMethod("generator", "any& get_value() const", WRAP_MFN_PR(CGenerator, GetValue,(void)const,const CScriptAny*), asCALL_GENERIC); assert( r >= 0 );
+        
+        // register the associated global functions and types
+        r = engine->RegisterGlobalFunction("any@ yield()", WRAP_FN(ScriptYield), asCALL_GENERIC); assert(r >= 0);
+        r = engine->RegisterGlobalFunction("any@ yield(?&in)", WRAP_FN(ScriptYieldObject), asCALL_GENERIC); assert(r >= 0);
+        r = engine->RegisterGlobalFunction("any@ yield(const int64&in)", WRAP_FN(ScriptYieldInt), asCALL_GENERIC); assert(r >= 0);
+        r = engine->RegisterGlobalFunction("any@ yield(const double&in)", WRAP_FN(ScriptYieldDouble), asCALL_GENERIC); assert(r >= 0);
+        r = engine->RegisterFuncdef("void generatorFunc(dictionary@)");
+        r = engine->RegisterGlobalFunction("generator@ createGenerator(generatorFunc @+, dictionary @+)", WRAP_FN(ScriptCreateGenerator), asCALL_GENERIC); assert(r >= 0);
+    }
 }
-
 END_AS_NAMESPACE
